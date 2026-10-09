@@ -5,23 +5,23 @@ static void wr32(uint8_t*p,uint32_t v){p[0]=(uint8_t)v;p[1]=(uint8_t)(v>>8);p[2]
 static uint16_t rd16(const uint8_t*p){return (uint16_t)p[0]|((uint16_t)p[1]<<8);}
 static uint32_t rd32(const uint8_t*p){return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);}
 uint32_t usb_crc32(const uint8_t*data,size_t n){uint32_t c=0xFFFFFFFFu;if(!data&&n)return 0;for(size_t i=0;i<n;i++){c^=data[i];for(unsigned b=0;b<8;b++)c=(c&1u)?(c>>1)^0xEDB88320u:c>>1;}return c^0xFFFFFFFFu;}
-static uint32_t packet_crc(const uint8_t *buf,size_t n){uint8_t tmp[USB_PROTO_MAX_PACKET];if(n>sizeof(tmp))return 0;memcpy(tmp,buf,n);memset(tmp+8,0,4);return usb_crc32(tmp,8)^usb_crc32(tmp+USB_PROTO_HEADER_SIZE,n-USB_PROTO_HEADER_SIZE);}
+static uint32_t packet_crc(const uint8_t *buf,size_t n){uint8_t tmp[USB_PROTO_MAX_PACKET];if(n>sizeof(tmp))return 0;memcpy(tmp,buf,n);memset(tmp+12,0,4);return usb_crc32(tmp,12+n-USB_PROTO_HEADER_SIZE+USB_PROTO_HEADER_SIZE);}
 int usb_packet_encode(uint8_t*out,size_t cap,uint8_t cmd,uint32_t seq,const uint8_t*payload,uint16_t n,size_t*written){
  if(!out||!written||(!payload&&n)||n>USB_PROTO_MAX_PAYLOAD||cap<USB_PROTO_HEADER_SIZE+(size_t)n)return -1;
- wr32(out,USB_PROTO_MAGIC);out[4]=USB_PROTO_VERSION;out[5]=cmd;wr16(out+6,n);wr32(out+8,0);
+ wr32(out,USB_PROTO_MAGIC);out[4]=USB_PROTO_VERSION;out[5]=cmd;wr16(out+6,n);wr32(out+8,seq);wr32(out+12,0);
  if(n)memcpy(out+USB_PROTO_HEADER_SIZE,payload,n);
- wr32(out+8,packet_crc(out,USB_PROTO_HEADER_SIZE+n));*written=USB_PROTO_HEADER_SIZE+n;return 0;
+ uint32_t crc=usb_crc32(out,12);crc=~crc; /* replaced below with canonical standard CRC over header+payload with CRC field zero */
+ uint8_t tmp[USB_PROTO_MAX_PACKET];memcpy(tmp,out,USB_PROTO_HEADER_SIZE+n);memset(tmp+12,0,4);crc=usb_crc32(tmp,USB_PROTO_HEADER_SIZE+n);wr32(out+12,crc);
+ *written=USB_PROTO_HEADER_SIZE+n;return 0;
 }
 usb_status_t usb_packet_decode(const uint8_t*buf,size_t len,usb_packet_view_t*p){
  if(!buf||!p||len<USB_PROTO_HEADER_SIZE)return USB_STATUS_BAD_LENGTH;
  if(rd32(buf)!=USB_PROTO_MAGIC)return USB_STATUS_BAD_MAGIC;
  if(buf[4]!=USB_PROTO_VERSION)return USB_STATUS_BAD_VERSION;
  uint16_t n=rd16(buf+6);if(n>USB_PROTO_MAX_PAYLOAD||len!=USB_PROTO_HEADER_SIZE+(size_t)n)return USB_STATUS_BAD_LENGTH;
- if(packet_crc(buf,len)!=rd32(buf+8))return USB_STATUS_INTERNAL;
- p->version=buf[4];p->command=buf[5];p->payload_len=n;p->sequence=rd32(buf+8);p->crc32=rd32(buf+8);p->payload=buf+USB_PROTO_HEADER_SIZE;
- /* The 12-byte wire header stores sequence in bytes 8-11; CRC is verified over a zeroed CRC slot would overlap sequence.
-    Keep a separate checksum layout: magic,version,command,length,sequence,CRC follows header. */
- return USB_STATUS_OK;
+ uint8_t tmp[USB_PROTO_MAX_PACKET];memcpy(tmp,buf,len);memset(tmp+12,0,4);
+ if(usb_crc32(tmp,len)!=rd32(buf+12))return USB_STATUS_INTERNAL;
+ p->version=buf[4];p->command=buf[5];p->payload_len=n;p->sequence=rd32(buf+8);p->crc32=rd32(buf+12);p->payload=buf+USB_PROTO_HEADER_SIZE;return USB_STATUS_OK;
 }
 size_t usb_handle_command(const usb_packet_view_t*r,uint8_t*out,size_t cap,usb_counters_t*c){
  if(!r||!out||!c||cap<USB_PROTO_HEADER_SIZE)return 0;
