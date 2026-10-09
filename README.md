@@ -33,6 +33,14 @@ The portable core is separated from STM32-specific HAL/FDCAN-style register conc
 - Bulk OUT endpoint `0x01` and bulk IN endpoint `0x81` descriptors.
 - Descriptor lengths checked by unit tests.
 
+### EP0 control request model
+- GET_DESCRIPTOR for device/configuration descriptors.
+- SET_ADDRESS and SET_CONFIGURATION validation.
+- GET_CONFIGURATION and GET_STATUS.
+- Explicit STALL response for unsupported requests.
+
+This returns response intent for the controller driver; it does not itself perform USB bus transactions.
+
 ### Device state model
 - Default, addressed and configured states.
 - Address range validation.
@@ -70,20 +78,25 @@ A protocol-only Python test module is included for the packet codec.
 
     USB-2.0-Device-Controller-with-Custom-Firmware-Stack/
     +-- docs/
+    |   +-- CONTROL_TRANSFERS.md
     |   +-- HARDWARE_INTEGRATION.md
     |   +-- PROTOCOL.md
     |   +-- TEST_PLAN.md
     +-- firmware/
     |   +-- examples/usb_demo.c
     |   +-- include/
+    |   |   +-- usb_control.h
     |   |   +-- usb_descriptors.h
     |   |   +-- usb_device_model.h
     |   |   +-- usb_protocol.h
     |   +-- src/
+    |   |   +-- usb_control.c
     |   |   +-- usb_descriptors.c
     |   |   +-- usb_device_model.c
     |   |   +-- usb_protocol.c
-    |   +-- tests/test_usb.c
+    |   +-- tests/
+    |       +-- test_control.c
+    |       +-- test_usb.c
     +-- host/
     |   +-- test_protocol.py
     |   +-- usb_host.py
@@ -104,9 +117,13 @@ Run demo:
 
     make demo
 
-Run C tests:
+Run protocol tests:
 
     make test
+
+Run EP0 control-request model tests:
+
+    make control-test
 
 Run Python packet-codec tests:
 
