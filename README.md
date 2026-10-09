@@ -2,7 +2,7 @@
 
 An embedded C USB device/protocol reference project paired with a Python host utility. It models USB device/configuration descriptors, address/configuration state, bulk-endpoint command processing, packet validation, and a custom host-to-device binary protocol.
 
-> **Scope:** The portable firmware code demonstrates descriptor data, USB state transitions and application protocol logic. It is not yet a complete hardware USB controller driver: real enumeration requires MCU-specific EP0, reset, endpoint/FIFO, packet-toggle and transfer-completion handling. No physical enumeration, throughput or board-level tests are claimed.
+> **Scope:** The portable firmware code demonstrates descriptor data, device-state transitions, and application protocol logic. It is not yet a complete hardware USB controller driver: real enumeration requires MCU-specific EP0, reset, endpoint/FIFO, packet-toggle and transfer-completion handling. No physical enumeration, throughput or board-level tests are claimed.
 
 ## Architecture
 
@@ -23,7 +23,7 @@ An embedded C USB device/protocol reference project paired with a Python host ut
       /      |      |      \
     ping    info   echo   counters
 
-The algorithmic core does not depend on a specific STM32 HAL. The descriptor and state model are reference components intended to be connected to an STM32F4/F7/H7 USB device peripheral.
+The portable core is separated from STM32-specific HAL/FDCAN-style register concerns, allowing later integration with STM32F4/F7/H7 USB device peripherals.
 
 ## Implemented Features
 
@@ -62,7 +62,7 @@ Supported commands:
 - `reset` — reset counters.
 
 ### Host-side utility
-`host/usb_host.py` discovers a device by configurable VID/PID, selects bulk endpoints, sends a validated packet, enforces timeouts, parses the response and reports errors clearly. It requires PyUSB and a functioning USB device/controller implementation.
+`host/usb_host.py` discovers a device by configurable VID/PID, selects bulk endpoints, sends a validated packet, enforces timeouts, parses the response and reports errors clearly. It requires PyUSB and a functioning hardware USB implementation.
 
 A protocol-only Python test module is included for the packet codec.
 
@@ -94,17 +94,13 @@ A protocol-only Python test module is included for the packet codec.
 
 ## Build and Test
 
-Requirements:
-- C11 compiler such as GCC or Clang;
-- GNU Make;
-- Python 3 for host-side tests;
-- PyUSB only for communicating with a physical device.
+Requirements: C11 compiler such as GCC/Clang, GNU Make, Python 3, and PyUSB only for communication with a physical device.
 
-Build the C demo and firmware reference tests:
+Build C demo and tests:
 
     make
 
-Run the demo:
+Run demo:
 
     make demo
 
@@ -117,20 +113,15 @@ Run Python packet-codec tests:
     cd host
     python -m unittest test_protocol.py
 
-Install the host transport dependency when needed:
+Install PyUSB when needed:
 
     python -m pip install pyusb
 
 ## Today's Milestone: Validated Command-Response Packet
 
-The `usb_demo` performs a **software-model** transaction:
-1. inspect the reference descriptor lengths;
-2. set an address and configure the model;
-3. encode an ECHO request with a sequence number and payload;
-4. pass it through the firmware protocol validator;
-5. decode and print the response.
+The `usb_demo` performs a **software-model** transaction: inspect descriptor lengths, set an address and configuration in the model, encode an ECHO request with a sequence number and payload, pass it through firmware packet validation, and decode/print the response.
 
-It demonstrates application protocol round-trip logic. It does not prove that a computer has enumerated a physical USB device.
+This demonstrates application-level protocol round-trip logic. It does not prove that a computer has enumerated a physical USB device.
 
 ## Hardware Integration Path
 
@@ -146,28 +137,15 @@ For STM32F4/F7/H7, the remaining hardware-specific work includes:
 - interrupt-driven IN/OUT completion;
 - USB bus reset and disconnect recovery.
 
-The descriptor arrays and device-state model are not a replacement for the USB peripheral driver. Integrate them with the selected vendor LL/HAL or a separately implemented controller driver before attempting physical enumeration.
+The descriptor arrays and state model are not a replacement for the USB peripheral driver. Integrate them with the selected vendor LL/HAL or a separately implemented controller driver before attempting physical enumeration.
 
 ## Host Debugging
 
-Use USBPcap/Wireshark on Windows or a USB protocol analyzer to inspect:
-- device/configuration descriptor reads;
-- SET_ADDRESS and SET_CONFIGURATION;
-- endpoint addresses and max packet sizes;
-- bulk request/response sequence numbers;
-- timeouts, malformed packets and reconnect recovery.
+Use USBPcap/Wireshark on Windows or a USB protocol analyzer to inspect descriptor reads, SET_ADDRESS/SET_CONFIGURATION, endpoint addresses/max packet sizes, bulk request-response sequence numbers, timeouts, malformed packets, and reconnect recovery.
 
 ## Performance Measurements
 
-When hardware is available, benchmark:
-- enumeration success rate;
-- round-trip latency percentiles;
-- bulk throughput with several payload sizes;
-- malformed-packet rejection;
-- recovery after USB reset/disconnect;
-- CPU load and buffer overflow behavior.
-
-Do not treat desktop simulation or the demo output as measured USB throughput.
+When hardware is available, benchmark enumeration success rate, round-trip latency percentiles, bulk throughput for multiple payload sizes, malformed-packet rejection, reset/disconnect recovery time and CPU load. Do not treat desktop simulation or the demo output as measured USB throughput.
 
 ## License
 
